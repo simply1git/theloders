@@ -1,7 +1,8 @@
 const express = require('express');
-const { exec } = require('youtube-dl-exec'); // Updated to youtube-dl-exec
+const { exec } = require('youtube-dl-exec');
 const WebSocket = require('ws');
-const fs = require('fs').promises;
+const fs = require('fs'); // Revert to standard fs module
+const fsPromises = require('fs').promises; // Use for async operations
 const path = require('path');
 const app = express();
 const port = process.env.PORT || 3000;
@@ -10,7 +11,11 @@ app.use(express.json());
 
 const wss = new WebSocket.Server({ noServer: true });
 const cacheDir = path.join(__dirname, 'cache');
-if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
+
+// Check if cache directory exists synchronously
+if (!fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir);
+}
 
 app.get('/download', async (req, res) => {
     const { link, type, quality, format, filename, id } = req.query;
@@ -97,11 +102,15 @@ function isValidUrl(string) {
 }
 
 async function cleanupCache() {
-    const files = await fs.readdir(cacheDir);
+    const files = await fsPromises.readdir(cacheDir);
     const now = Date.now();
     for (const file of files) {
         const filePath = path.join(cacheDir, file);
-        const stats = await fs.stat(filePath);
-        if (now - stats.mtimeMs > 24 * 60 * 60 * 1000) await fs.unlink(filePath);
+        const stats = await fsPromises.stat(filePath);
+        if (now - stats.mtimeMs > 24 * 60 * 60 * 1000) await fsPromises.unlink(filePath);
     }
 }
+
+
+
+
