@@ -44,13 +44,13 @@ app.get('/download', async (req, res) => {
         ];
 
         if (type === 'audio' && req.query.preview === 'true') {
-            options.push('--get-url'); // Get stream URL for preview
-            const url = (await exec(link, options)).stdout.toString().trim();
+            options.push('--get-url');
+            const url = (await exec(link, options, { customBinary: './bin/yt-dlp' })).stdout.toString().trim();
             res.setHeader('Content-Type', 'audio/mpeg');
             return fetch(url).then(resp => resp.body.pipe(res));
         }
 
-        const ytDlpProcess = exec(link, options, { stdio: ['pipe', 'pipe', 'pipe'] });
+        const ytDlpProcess = exec(link, options, { customBinary: './bin/yt-dlp' }, { stdio: ['pipe', 'pipe', 'pipe'] });
 
         ytDlpProcess.stdout.on('data', (data) => {
             const str = data.toString();
@@ -86,16 +86,15 @@ app.get('/download', async (req, res) => {
     }
 });
 
-// Preview endpoint for audio
 app.get('/preview', async (req, res) => {
     const { link } = req.query;
     if (!link || !isValidUrl(link)) return res.status(400).json({ error: 'Invalid URL' });
     const options = ['-f', 'bestaudio/best', '--get-url', '--no-check-certificate'];
     try {
-        const url = (await exec(link, options)).stdout.toString().trim();
+        const url = (await exec(link, options, { customBinary: './bin/yt-dlp' })).stdout.toString().trim();
         res.setHeader('Content-Type', 'audio/mpeg');
         const response = await fetch(url, { method: 'HEAD' });
-        const duration = response.headers.get('content-length') ? Math.min(30000, parseInt(response.headers.get('content-length'))) : 30000; // 30 seconds max
+        const duration = response.headers.get('content-length') ? Math.min(30000, parseInt(response.headers.get('content-length'))) : 30000;
         fetch(url, { headers: { 'Range': `bytes=0-${duration}` } }).then(resp => resp.body.pipe(res));
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -122,4 +121,5 @@ async function cleanupCache() {
         if (now - stats.mtimeMs > 24 * 60 * 60 * 1000) await fs.unlink(filePath);
     }
 }
+
 
