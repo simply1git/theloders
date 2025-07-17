@@ -30,7 +30,7 @@
             const [badges, setBadges] = useState([]);
 
             useEffect(() => {
-                const ws = new WebSocket('wss://your-render-app.onrender.com');
+                const ws = new WebSocket('wss://theloders-backend.onrender.com');
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     if (data.progress && data.id) {
@@ -63,7 +63,7 @@
                     setLoading(true);
                     setError('');
                     try {
-                        const response = await fetch(`https://your-render-app.onrender.com/download?link=${encodeURIComponent(item.link)}&type=${item.type}&quality=${item.quality}&format=${item.format}&filename=${encodeURIComponent(item.fileName)}`, {
+                        const response = await fetch(`https://theloders-backend.onrender.com/download?link=${encodeURIComponent(item.link)}&type=${item.type}&quality=${item.quality}&format=${item.format}&filename=${encodeURIComponent(item.fileName)}`, {
                             method: 'GET',
                             signal: AbortSignal.timeout(30000)
                         });
