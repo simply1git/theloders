@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const fetch = require('node-fetch');
 const { exec } = require('youtube-dl-exec');
 const WebSocket = require('ws');
@@ -10,6 +11,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const cacheDir = path.join(__dirname, 'cache');
 
+app.use(cors());
 app.use(express.json());
 
 if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
@@ -23,8 +25,10 @@ wss.on('connection', ws => {
   ws.on('close', () => clients.delete(ws));
 });
 
-// Upgrade HTTP server to handle WS
-const server = app.listen(port, () => console.log(`Server running on port ${port}`));
+const server = app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
+
 server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, ws => {
     wss.emit('connection', ws, req);
@@ -48,12 +52,13 @@ async function cleanupCache() {
     }
   }
 }
-// Run at startup and every 6 hours
 cleanupCache();
 setInterval(cleanupCache, 6 * 60 * 60 * 1000);
 
 app.get('/download', async (req, res) => {
   const { link, type, quality, format, filename, id } = req.query;
+  console.log(`Download requested: ${link}, type=${type}, quality=${quality}, format=${format}`);
+
   if (!link || !isValidUrl(link)) return res.status(400).json({ error: 'Invalid URL' });
   if (!['video','audio','both'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
   if (type === 'video' && !quality) return res.status(400).json({ error: 'Quality required for video' });
@@ -65,11 +70,11 @@ app.get('/download', async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${filename || `downloaded_${type}`}.${format}"`);
   res.setHeader('Content-Type', type === 'audio' ? 'audio/mpeg' : `video/${format}`);
 
-  // Build yt-dlp options
   const maxHeight = quality?.replace('k','000') || '1080';
   const formatSelector = type === 'audio'
     ? 'bestaudio/best'
     : `bestvideo[height<=?${maxHeight}]+bestaudio/best`;
+
   const options = [
     '-f', formatSelector,
     '--merge-output-format', format,
@@ -80,13 +85,13 @@ app.get('/download', async (req, res) => {
   ];
 
   try {
-    // Run yt-dlp
     const subprocess = exec(link, options, { stdio: ['ignore','pipe','pipe'] });
+
     subprocess.stdout.on('data', chunk => {
       const str = chunk.toString();
-      const m = str.match(/(\d+\.\d+)%/);
-      if (m) {
-        const progress = parseFloat(m[1]);
+      const match = str.match(/(\d+\.\d+)%/);
+      if (match) {
+        const progress = parseFloat(match[1]);
         for (const client of clients) {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ id, progress }));
@@ -94,9 +99,8 @@ app.get('/download', async (req, res) => {
         }
       }
     });
-    await subprocess; // wait for completion
 
-    // Stream file
+    await subprocess;
     fs.createReadStream(cachedFile).pipe(res);
   } catch (err) {
     console.error('Download error:', err);
@@ -104,22 +108,9 @@ app.get('/download', async (req, res) => {
   }
 });
 
-app.get('/preview', async (req, res) => {
-  const { link } = req.query;
-  if (!link || !isValidUrl(link)) return res.status(400).json({ error: 'Invalid URL' });
 
-  try {
-    const url = await exec(link, ['-f','bestaudio/best','--get-url','--no-check-certificate'], { stdio: ['ignore','pipe','ignore'] })
-      .then(r => r.stdout.trim());
 
-    const head = await fetch(url, { method: 'HEAD' });
-    const maxBytes = Math.min(30000, parseInt(head.headers.get('content-length')||'30000',10));
-    res.setHeader('Content-Type', 'audio/mpeg');
 
-    const resp = await fetch(url, { headers: { Range: `bytes=0-${maxBytes}` } });
-    resp.body.pipe(res);
-  } catch (err) {
-    console.error('Preview error:', err);
-    res.status(500).json({ error: 'Preview failed' });
-  }
-});
+
+
+
