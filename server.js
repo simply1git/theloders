@@ -20,12 +20,15 @@ if (!fs.existsSync(cacheDir)) {
 app.get('/download', async (req, res) => {
     const { link, type, quality, format, filename, id } = req.query;
 
-    if (!link || !isValidUrl(link)) return res.status(400).json({ error: 'Invalid or missing URL' });
+    if (!link || !isValidUrl(link)) {
+        console.error('Invalid URL:', link);
+        return res.status(400).json({ error: 'Invalid or missing URL' });
+    }
     if (!['video', 'audio', 'both'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
     if (type === 'video' && !quality) return res.status(400).json({ error: 'Quality required for video' });
     if (!['mp4', 'mp3', 'wav'].includes(format)) return res.status(400).json({ error: 'Invalid format' });
 
-    const cacheKey = `${link}-${type}-${quality}-${format}`;
+    const cacheKey = `${encodeURIComponent(link)}-${type}-${quality}-${format}`;
     const cachedFile = path.join(cacheDir, `${cacheKey}.${format}`);
 
     res.setHeader('Content-Disposition', `attachment; filename="${filename || `downloaded_${type}`}.${format}"`);
@@ -50,13 +53,27 @@ app.get('/download', async (req, res) => {
 
         if (type === 'audio' && req.query.preview === 'true') {
             options.push('--get-url');
-            const url = await exec(link, options, { stdio: ['pipe', 'ignore', 'ignore'] }).then(result => result.stdout.trim());
-            res.setHeader('Content-Type', 'audio/mpeg');
-            return fetch(url).then(resp => resp.body.pipe(res)).catch(err => res.status(500).json({ error: err.message }));
+            try {
+                const url = await exec(link, options, { stdio: ['pipe', 'ignore', 'ignore'] }).then(result => result.stdout.trim());
+                res.setHeader('Content-Type', 'audio/mpeg');
+                const response = await fetch(url, { method: 'HEAD' });
+                const duration = response.headers.get('content-length') ? Math.min(30000, parseInt(response.headers.get('content-length'))) : 30000;
+                fetch(url, { headers: { 'Range': `bytes=0-${duration}` } }).then(resp => resp.body.pipe(res)).catch(err => {
+                    console.error('Fetch error:', err.message);
+                    res.status(500).json({ error: 'Failed to fetch preview' });
+                });
+            } catch (error) {
+                console.error('Exec error:', error.message);
+                res.status(500).json({ error: 'Download processing failed' });
+            }
+            return;
         }
 
         exec(link, options, { stdio: ['pipe', 'pipe', 'pipe'] }, (error, output) => {
-            if (error) return res.status(500).json({ error: error.message });
+            if (error) {
+                console.error('Download error:', error.message);
+                return res.status(500).json({ error: error.message });
+            }
             const str = output.toString();
             if (str.includes('download')) {
                 const match = str.match(/(\d+\.\d+)%/);
@@ -71,21 +88,29 @@ app.get('/download', async (req, res) => {
             cleanupCache();
         });
     } catch (error) {
+        console.error('General error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });
 
 app.get('/preview', async (req, res) => {
     const { link } = req.query;
-    if (!link || !isValidUrl(link)) return res.status(400).json({ error: 'Invalid URL' });
+    if (!link || !isValidUrl(link)) {
+        console.error('Invalid preview URL:', link);
+        return res.status(400).json({ error: 'Invalid URL' });
+    }
     const options = ['-f', 'bestaudio/best', '--get-url', '--no-check-certificate'];
     try {
         const url = await exec(link, options, { stdio: ['pipe', 'ignore', 'ignore'] }).then(result => result.stdout.trim());
         res.setHeader('Content-Type', 'audio/mpeg');
         const response = await fetch(url, { method: 'HEAD' });
         const duration = response.headers.get('content-length') ? Math.min(30000, parseInt(response.headers.get('content-length'))) : 30000;
-        fetch(url, { headers: { 'Range': `bytes=0-${duration}` } }).then(resp => resp.body.pipe(res));
+        fetch(url, { headers: { 'Range': `bytes=0-${duration}` } }).then(resp => resp.body.pipe(res)).catch(err => {
+            console.error('Preview fetch error:', err.message);
+            res.status(500).json({ error: 'Failed to fetch preview' });
+        });
     } catch (error) {
+        console.error('Preview error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });
@@ -110,6 +135,8 @@ async function cleanupCache() {
         if (now - stats.mtimeMs > 24 * 60 * 60 * 1000) await fsPromises.unlink(filePath);
     }
 }
+
+
 
 
 
