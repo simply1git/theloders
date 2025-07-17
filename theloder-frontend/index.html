@@ -2,62 +2,70 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Theloders – Free Downloader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Theloders - Fast Downloader</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 text-gray-900 min-h-screen flex flex-col items-center justify-center p-8">
+<body class="bg-gray-100 text-gray-900 flex flex-col items-center p-8">
 
-  <h1 class="text-4xl font-bold text-orange-500 mb-6">Theloders</h1>
+  <h1 class="text-4xl font-bold mb-6 text-orange-500">Theloders</h1>
 
-  <div class="w-full max-w-lg space-y-4">
-    <input id="urlInput" type="url" placeholder="Paste YouTube URL" class="w-full p-3 rounded border border-orange-500" />
+  <div class="space-y-4 w-full max-w-xl">
+    <input id="link" type="url" placeholder="Paste video URL" class="w-full p-3 border-2 border-orange-500 rounded" />
 
-    <button onclick="fetchInfo()" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded w-full">
-      Get Download Links
+    <div class="flex items-center gap-4">
+      <label><input type="radio" name="type" value="video" checked /> Video</label>
+      <label><input type="radio" name="type" value="audio" /> Audio</label>
+    </div>
+
+    <button onclick="startDownload()" class="bg-orange-500 text-white px-6 py-3 rounded hover:bg-orange-600">
+      Download
     </button>
 
+    <div id="status" class="text-green-600 font-medium mt-4"></div>
     <div id="error" class="text-red-500 mt-2"></div>
-    <div id="results" class="mt-4 space-y-2"></div>
   </div>
 
   <script>
-    async function fetchInfo() {
-      const url = document.getElementById('urlInput').value;
+    async function startDownload() {
+      const link = document.getElementById('link').value;
+      const type = document.querySelector('input[name="type"]:checked').value;
+      const statusEl = document.getElementById('status');
       const errorEl = document.getElementById('error');
-      const resultsEl = document.getElementById('results');
+      statusEl.textContent = '';
       errorEl.textContent = '';
-      resultsEl.innerHTML = '';
 
-      if (!url.startsWith('http')) {
-        errorEl.textContent = 'Please enter a valid video URL.';
+      if (!link.trim()) {
+        errorEl.textContent = 'Please enter a valid URL.';
         return;
       }
 
       try {
-        const response = await fetch(`https://ytdl.lnr.domains/api/info?url=${encodeURIComponent(url)}`);
-        const data = await response.json();
+        statusEl.textContent = 'Resolving media...';
 
-        if (!data.formats || data.formats.length === 0) {
-          errorEl.textContent = 'No downloadable formats found.';
-          return;
-        }
+        const res = await fetch(`https://theloder-backend.onrender.com/resolve?link=${encodeURIComponent(link)}&type=${type}`);
+        const data = await res.json();
 
-        data.formats.forEach(format => {
-          const label = `${format.mimeType} – ${format.qualityLabel || format.audioQuality || ''}`;
-          const link = document.createElement('a');
-          link.href = format.url;
-          link.textContent = `Download: ${label}`;
-          link.className = 'block text-blue-600 hover:underline';
-          link.download = true;
-          link.target = '_blank';
-          resultsEl.appendChild(link);
-        });
+        if (!res.ok) throw new Error(data.error || 'Unknown error');
+
+        const mediaRes = await fetch(data.url);
+        const blob = await mediaRes.blob();
+        const filename = `downloaded_${type}.${type === 'audio' ? 'mp3' : 'mp4'}`;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+
+        statusEl.textContent = 'Download started.';
       } catch (err) {
-        console.error(err);
-        errorEl.textContent = 'Failed to fetch video info.';
+        errorEl.textContent = 'Error: ' + err.message;
       }
     }
   </script>
 
 </body>
 </html>
+
+
+
+
