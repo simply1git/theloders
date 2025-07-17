@@ -19,7 +19,7 @@ echo "Verifying tools..."
 ./bin/yt-dlp --version
 ./bin/ffmpeg -version
 
-echo "✅ Build completed."
+echo "Build completed."
 
 
 
