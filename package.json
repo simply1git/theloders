@@ -7,8 +7,11 @@
     "build": "bash build.sh"
   },
   "dependencies": {
-    "express": "^4.17.1",
-    "yt-dlp-exec": "^2.0.0",
-    "ws": "^8.5.0"
+    "express": "^4.19.2",  // Latest stable version
+    "yt-dlp-exec": "^3.0.0", // Updated to a potentially valid version, check npm
+    "ws": "^8.18.0"         // Latest stable version
   }
 }
+
+
+
