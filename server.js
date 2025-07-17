@@ -1,8 +1,8 @@
 const express = require('express');
 const { exec } = require('youtube-dl-exec');
 const WebSocket = require('ws');
-const fs = require('fs'); // Revert to standard fs module
-const fsPromises = require('fs').promises; // Use for async operations
+const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const app = express();
 const port = process.env.PORT || 3000;
