@@ -1,6 +1,7 @@
 {
   "name": "theloder",
   "version": "1.0.0",
+  "description": "A modern web-based media downloader using yt-dlp, ffmpeg and WebSockets",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,8 +11,7 @@
     "express": "^4.19.2",
     "youtube-dl-exec": "^2.2.0",
     "ws": "^8.18.0"
-  }
+  },
+  "license": "MIT"
 }
-
-
 
