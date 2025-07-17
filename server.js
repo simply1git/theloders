@@ -1,5 +1,5 @@
 const express = require('express');
-const { exec } = require('yt-dlp-exec');
+let { exec } = require('yt-dlp-exec'); // Fallback to binary if package fails
 const WebSocket = require('ws');
 const fs = require('fs').promises;
 const path = require('path');
@@ -7,6 +7,22 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
+
+// Fallback to binary if yt-dlp-exec fails
+try {
+    exec = require('yt-dlp-exec').exec || exec;
+} catch (e) {
+    exec = (args, options, callback) => {
+        const { spawn } = require('child_process');
+        const ytDlpPath = path.join(__dirname, 'bin', 'yt-dlp');
+        const child = spawn(ytDlpPath, args, { ...options, stdio: 'pipe' });
+        let stdout = '', stderr = '';
+        child.stdout.on('data', data => stdout += data);
+        child.stderr.on('data', data => stderr += data);
+        child.on('close', code => callback(code ? new Error(stderr) : null, stdout));
+        return child;
+    };
+}
 
 const wss = new WebSocket.Server({ noServer: true });
 const cacheDir = path.join(__dirname, 'cache');
@@ -45,15 +61,21 @@ app.get('/download', async (req, res) => {
 
         if (type === 'audio' && req.query.preview === 'true') {
             options.push('--get-url');
-            const url = (await exec(link, options, { customBinary: './bin/yt-dlp' })).stdout.toString().trim();
-            res.setHeader('Content-Type', 'audio/mpeg');
-            return fetch(url).then(resp => resp.body.pipe(res));
+            exec(link, options, (error, stdout) => {
+                if (error) return res.status(500).json({ error: error.message });
+                const url = stdout.trim();
+                res.setHeader('Content-Type', 'audio/mpeg');
+                fetch(url).then(resp => resp.body.pipe(res)).catch(err => res.status(500).json({ error: err.message }));
+            });
+            return;
         }
 
-        const ytDlpProcess = exec(link, options, { customBinary: './bin/yt-dlp' }, { stdio: ['pipe', 'pipe', 'pipe'] });
-
-        ytDlpProcess.stdout.on('data', (data) => {
-            const str = data.toString();
+        exec(link, options, { stdio: ['pipe', 'pipe', 'pipe'] }, (error, stdout, stderr) => {
+            if (error) {
+                res.status(500).json({ error: error.message || stderr });
+                return;
+            }
+            const str = stdout.toString();
             if (str.includes('download')) {
                 const match = str.match(/(\d+\.\d+)%/);
                 if (match) {
@@ -63,23 +85,9 @@ app.get('/download', async (req, res) => {
                     });
                 }
             }
-        });
-
-        ytDlpProcess.stderr.on('data', (data) => console.error(`stderr: ${data}`));
-
-        ytDlpProcess.on('close', (code) => {
-            if (code === 0) {
-                fs.createReadStream(cachedFile).pipe(res);
-                cleanupCache();
-            } else {
-                res.status(500).json({ error: 'Download failed' });
-            }
-            clearInterval(progressInterval);
-        });
-
-        ytDlpProcess.on('error', (error) => {
-            res.status(500).json({ error: error.message });
-            clearInterval(progressInterval);
+            if (error) res.status(500).json({ error: error.message });
+            else fs.createReadStream(cachedFile).pipe(res);
+            cleanupCache();
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -91,11 +99,14 @@ app.get('/preview', async (req, res) => {
     if (!link || !isValidUrl(link)) return res.status(400).json({ error: 'Invalid URL' });
     const options = ['-f', 'bestaudio/best', '--get-url', '--no-check-certificate'];
     try {
-        const url = (await exec(link, options, { customBinary: './bin/yt-dlp' })).stdout.toString().trim();
-        res.setHeader('Content-Type', 'audio/mpeg');
-        const response = await fetch(url, { method: 'HEAD' });
-        const duration = response.headers.get('content-length') ? Math.min(30000, parseInt(response.headers.get('content-length'))) : 30000;
-        fetch(url, { headers: { 'Range': `bytes=0-${duration}` } }).then(resp => resp.body.pipe(res));
+        exec(link, options, (error, stdout) => {
+            if (error) return res.status(500).json({ error: error.message });
+            const url = stdout.trim();
+            res.setHeader('Content-Type', 'audio/mpeg');
+            const response = fetch(url, { method: 'HEAD' });
+            const duration = response.headers.get('content-length') ? Math.min(30000, parseInt(response.headers.get('content-length'))) : 30000;
+            fetch(url, { headers: { 'Range': `bytes=0-${duration}` } }).then(resp => resp.body.pipe(res));
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -121,5 +132,3 @@ async function cleanupCache() {
         if (now - stats.mtimeMs > 24 * 60 * 60 * 1000) await fs.unlink(filePath);
     }
 }
-
-
