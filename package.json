@@ -7,9 +7,9 @@
     "build": "bash build.sh"
   },
   "dependencies": {
-    "express": "^4.19.2",  // Latest stable version
-    "yt-dlp-exec": "^3.0.0", // Updated to a potentially valid version, check npm
-    "ws": "^8.18.0"         // Latest stable version
+    "express": "^4.19.2",
+    "youtube-dl-exec": "^2.2.0", // Replaced yt-dlp-exec
+    "ws": "^8.18.0"
   }
 }
 
