@@ -1,0 +1,14 @@
+{
+  "name": "theloder",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "bash build.sh"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "yt-dlp-exec": "^2.0.0",
+    "ws": "^8.5.0"
+  }
+}
